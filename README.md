@@ -4,7 +4,7 @@
 [![Build status](https://ci.appveyor.com/api/projects/status/dd42bs8pfao8k82p/branch/master?svg=true)](https://ci.appveyor.com/project/ripple/attn-server)
 [![codecov](https://codecov.io/gh/ripple/attn-server/branch/master/graph/badge.svg)](https://codecov.io/gh/ripple/attn-server)
 
-Rippled validator key generation tool
+Attestation Server for XRPL Sidechains
 
 ## Table of contents
 
@@ -62,4 +62,4 @@ and run the following commands:
 
 ## Guide
 
-[Validator Keys Tool Guide](doc/attn-server-guide.md)
+[Attestation Server Documentation](doc/attn-server-guide.md)

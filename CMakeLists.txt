@@ -1,5 +1,10 @@
 cmake_minimum_required (VERSION 3.11)
-project (validator-keys-tool)
+project (attn_server)
+
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD_REQUIRED TRUE)
+set(CMAKE_VERBOSE_MAKEFILE 1)
+
 
 #[===========================================[
   The tool depends on the xrpl_core
@@ -42,7 +47,7 @@ if (NOT has_parent)
     # rippled version to download. Default tag is develop/master/release as 
     # determined by the branch of this project
     if (NOT (_branch STREQUAL "master" OR _branch STREQUAL "release"))
-      set (rippled_tag "develop" CACHE STRING
+      set (rippled_tag "sidechain" CACHE STRING
         "tag/commit of rippled to fetch from if a local install is not found")
     else ()
       set (rippled_tag "${_branch}" CACHE STRING
@@ -75,6 +80,9 @@ add_executable (attn_server
   src/main.cpp
   src/RPCServer.cpp
   src/AttnServer.cpp
+  src/WebsocketClient.cpp
+  src/ChainListener.cpp
+  src/InitialSync.cpp
   #src/ValidatorKeys.cpp
   #src/ValidatorKeysTool.cpp
   ## UNIT TESTS:

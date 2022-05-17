@@ -1,8 +1,20 @@
 #include <AttnServer.h>
 #include <RPCServer.h>
+
+#include <boost/filesystem.hpp>
+#include <boost/format.hpp>
 #include <boost/asio.hpp>
 
+static std::string getEnvVar(char const* name)
+{
+    auto const v = getenv(name);
+    if (v != nullptr)
+        return { v };
+    return {};
+}
+
 namespace ripple {
+namespace sidechain {
 
 AttnServer::AttnServer()
 {
@@ -11,6 +23,11 @@ AttnServer::AttnServer()
 
 void AttnServer::loadConfig()
 {
+    std::string const homeDir = getEnvVar("HOME");
+    std::string const defaultNudbPath =
+        (homeDir.empty() ? boost::filesystem::current_path().string() : homeDir) +
+        "/.ripple/attn_server/nudb";
+    
     // --------------- should be loaded from .cfg file --------------------------
     static std::vector<std::string> peer_public_keys{
         "aKEkMFcHKoLccP3PeMWEKT7LGpCjT9CYwjosmo2f8e1M17KwznxG",
@@ -45,4 +62,5 @@ void AttnServer::mainLoop()
     io_context.run();
 }
 
+}
 }

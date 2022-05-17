@@ -7,8 +7,30 @@
 #include <string>
 #include <string_view>
 #include <vector>
+#include <memory>
 
-#include <ripple/protocol/Sign.h>
+
+//#include <ripple/app/sidechain/impl/DoorKeeper.h>
+//#include <ripple/app/sidechain/impl/MainchainListener.h>
+//#include <ripple/app/sidechain/impl/SidechainListener.h>
+//#include <ripple/app/sidechain/impl/SignatureCollector.h>
+//#include <ripple/app/sidechain/impl/SignerList.h>
+//#include <ripple/app/sidechain/impl/TicketHolder.h>
+#include <ripple/basics/Buffer.h>
+#include <ThreadSaftyAnalysis.h>
+#include <ripple/basics/UnorderedContainers.h>
+#include <ripple/basics/base_uint.h>
+#include <ripple/beast/utility/Journal.h>
+#include <ripple/core/Config.h>
+#include <ripple/json/json_value.h>
+#include <ripple/protocol/AccountID.h>
+#include <ripple/protocol/Quality.h>
+#include <ripple/protocol/STAmount.h>
+#include <ripple/protocol/SecretKey.h>
+
+#include <boost/container/flat_map.hpp>
+
+#include <FederatorEvents.h>
 
 namespace boost {
 namespace asio {
@@ -17,6 +39,10 @@ namespace asio {
 }
 
 namespace ripple {
+namespace sidechain {
+
+class MainchainListener;
+class SidechainListener;
 
 struct AttnServerConfig
 {
@@ -31,20 +57,120 @@ struct AttnServerConfig
 
 };
 
+enum  ChainType { sideChain, mainChain };
+enum class UnlockMainLoopKey { app, mainChain, sideChain };
+
 class AttnServer
 {
+public:
+    // These enums are encoded in the transaction. Changing the order will break
+    // backward compatibility. If a new type is added change txnTypeLast.
+    enum class TxnType { xChain, refund };
+    constexpr static std::uint8_t txnTypeLast = 2;
+
 private:
     AttnServerConfig cfg_;
+    
+    std::shared_ptr<MainchainListener> mainchainListener_;
+    std::shared_ptr<SidechainListener> sidechainListener_;
 
 public:
     AttnServer();
 
+    ~AttnServer();
+
+    void start();
+
+    void stop() EXCLUDES(m_);
+
+    void push(FederatorEvent&& e) EXCLUDES(m_, eventsMutex_);
+
+    // Don't process any events until the bootstrap has a chance to run
+    void unlockMainLoop(UnlockMainLoopKey key) EXCLUDES(m_);
+
+#ifdef LATER
+    void addPendingTxnSig(
+        TxnType txnType,
+        ChainType chaintype,
+        PublicKey const& federatorPk,
+        uint256 const& srcChainTxnHash,
+        std::optional<uint256> const& dstChainTxnHash,
+        STAmount const& amt,
+        AccountID const& srcChainSrcAccount,
+        AccountID const& dstChainDstAccount,
+        std::uint32_t seq,
+        Buffer&& sig) EXCLUDES(federatorPKsMutex_, pendingTxnsM_, toSendTxnsM_);
+
+    void addPendingTxnSig(ChainType chaintype, PublicKey const& publicKey, uint256 const& mId, Buffer&& sig);
+#endif
+    
+    // Return true if a transaction with this sequence has already been sent
+    bool alreadySent(ChainType chaintype, std::uint32_t seq) const;
+
+    void setLastXChainTxnWithResult(ChainType chaintype, std::uint32_t seq, std::uint32_t seqTook, uint256 const& hash);
+    void setNoLastXChainTxnWithResult(ChainType chaintype);
+    void stopHistoricalTxns(ChainType chaintype);
+    void initialSyncDone(ChainType chaintype);
+
+    // Get stats on the federator, including pending transactions and
+    // initialization state
+    Json::Value getInfo() const EXCLUDES(pendingTxnsM_);
+
+    void sweep();
+
+#ifdef LATER
+    SignatureCollector& getSignatureCollector(ChainType chain);
+    DoorKeeper& getDoorKeeper(ChainType chain);
+    TicketRunner& getTicketRunner();
+    void addSeqToSkip(ChainType chain, std::uint32_t seq) EXCLUDES(toSendTxnsM_);
+    
+    // TODO multi-sig refactor?
+    void addTxToSend(ChainType chain, std::uint32_t seq, STTx const& tx) EXCLUDES(toSendTxnsM_);
+#endif
+
+    // Set the accountSeq to the max of the current value and the requested
+    // value. This is done with a lock free algorithm.
+    void setAccountSeqMax(ChainType chaintype, std::uint32_t reqValue);
+
     void mainLoop();
+
 
 private:
     void loadConfig();
 };
 
+[[nodiscard]] static inline ChainType srcChainType(event::Dir dir)
+{
+    return dir == event::Dir::mainToSide ? ChainType::mainChain
+                                         : ChainType::sideChain;
+}
+
+[[nodiscard]] static inline ChainType dstChainType(event::Dir dir)
+{
+    return dir == event::Dir::mainToSide ? ChainType::sideChain
+                                         : ChainType::mainChain;
+}
+
+[[nodiscard]] static inline ChainType otherChainType(ChainType ct)
+{
+    return ct == ChainType::mainChain
+        ? ChainType::sideChain
+        : ChainType::mainChain;
+}
+
+[[nodiscard]] static inline ChainType getChainType(bool isMainchain)
+{
+    return isMainchain ? ChainType::mainChain
+                       : ChainType::sideChain;
+}
+
+[[nodiscard]] static inline char const* chainTypeStr(ChainType ct)
+{
+    return ct == ChainType::mainChain ? "mainchain" : "sidechain";
+}
+    
+
+}
 }
 
 #endif  // ATTNSERVER_H_INCLUDED

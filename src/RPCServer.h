@@ -4,6 +4,7 @@
 #include "AttnServer.h"
 
 namespace ripple {
+namespace sidechain {
 
 class RPCServer
 {
@@ -15,6 +16,7 @@ public:
 private:
 };
 
+}
 }
 
 #endif  // RPCSERVER_H_INCLUDED

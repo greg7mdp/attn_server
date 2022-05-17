@@ -35,4 +35,4 @@ test:
     - cd build/gcc.debug && cmake ../.. && cmake --build .
   override:
     # Execute unit tests under gdb
-    - gdb -return-child-result -quiet -batch -ex "set env MALLOC_CHECK_=3" -ex "set print thread-events off" -ex run -ex "thread apply all backtrace full" -ex "quit" --args build/gcc.debug/validator-keys --unittest
+    - gdb -return-child-result -quiet -batch -ex "set env MALLOC_CHECK_=3" -ex "set print thread-events off" -ex run -ex "thread apply all backtrace full" -ex "quit" --args build/gcc.debug/attn_server --unittest

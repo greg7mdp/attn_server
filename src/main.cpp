@@ -1,4 +1,4 @@
-//#include <AttnServer.h>
+#include <AttnServer.h>
 //#include <RPCServer.h>
 
 #include <ripple/basics/base64.h>
@@ -7,7 +7,6 @@
 #include <ripple/beast/unit_test.h>
 #include <ripple/beast/unit_test/dstream.hpp>
 
-#include <boost/filesystem.hpp>
 #include <boost/format.hpp>
 #include <boost/program_options.hpp>
 #include <boost/preprocessor/stringize.hpp>
@@ -41,20 +40,6 @@ char const* const versionString = "0.1.0"
 
 
 //LCOV_EXCL_START
-static
-std::string
-getEnvVar(char const* name)
-{
-    std::string value;
-
-    auto const v = getenv(name);
-
-    if (v != nullptr)
-        value = v;
-
-    return value;
-}
-
 void printHelp(const boost::program_options::options_description& desc)
 {
     std::cerr
@@ -75,8 +60,7 @@ void printHelp(const boost::program_options::options_description& desc)
 }
 //LCOV_EXCL_STOP
 
-std::string const&
-getVersionString()
+std::string const& getVersionString()
 {
     static std::string const value = [] {
         std::string const s = versionString;
@@ -156,8 +140,7 @@ int main(int argc, char** argv)
     //LCOV_EXCL_START
     if (vm.count("version"))
     {
-        std::cout << "attn_server version " <<
-            getVersionString() << std::endl;
+        std::cout << "attn_server version " << getVersionString() << std::endl;
         return 0;
     }
 
@@ -167,13 +150,10 @@ int main(int argc, char** argv)
         return EXIT_SUCCESS;
     }
 
-    std::string const homeDir = getEnvVar("HOME");
-    std::string const defaultNudbPath =
-        (homeDir.empty() ? boost::filesystem::current_path().string() : homeDir) +
-        "/.ripple/attn_server/nudb";
-
     try
     {
+        ripple::sidechain::AttnServer attn_server;
+        attn_server.mainLoop();
     }
     catch(std::exception const& e)
     {
