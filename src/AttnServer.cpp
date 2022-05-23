@@ -27,40 +27,90 @@ using boost::format;
 namespace ripple {
 namespace sidechain {
 
-AttnServer::AttnServer(std::string const& config_filename)
+AttnServer::AttnServer(std::string const& fname)
 {
-    loadConfig(config_filename);
+    loadConfig(fname);
 }
 
 #ifndef HAVE_BOOST_JSON
     template <class PT_ROOT>
-    static void loadChainConfig(ChainConfig &cfg, PT_ROOT const& root)
+    static void loadChainConfig(std::string const& fname, ChainType chaintype,
+                                ChainConfig &cfg, PT_ROOT const& root)
     {
+        cfg.chaintype = chaintype;
+        cfg.ip = root.get<std::string>("ip");
+        cfg.port = root.get<uint16_t>("port_ws");
+        cfg.door_account_str = root.get<std::string>("door_account");
+        auto acct = parseBase58<AccountID>(cfg.door_account_str);
+        if (acct)
+            cfg.door_account = *acct;
+        else {
+            auto err = str(format(": %1% - Invalid door_account value \"%2%\"") % fname % cfg.door_account_str);
+            throw std::runtime_error(err);
+        }
     }
 
     template <class PT_ROOT>
-    static void loadServerConfig(AttnServerConfig &cfg, PT_ROOT const& root)
+    static void loadServerConfig(std::string const& fname, AttnServerConfig &cfg, PT_ROOT const& root)
     {
+        auto pk = parseBase58<PublicKey>(TokenType::AccountPublic, root.get<std::string>("public_key"));
+        
+        if (pk) {
+            cfg.our_public_key = *pk;
+        } else {
+            auto err = str(format(": %1% - invalid public key") % fname);
+            throw std::runtime_error(err);
+        }
+
+        auto key_str = root.get<std::string>("secret_key");
+        auto sk = parseBase58<SecretKey>(TokenType::AccountSecret, key_str);
+    
+        if (!sk) {
+            std::optional<Seed> seed = parseRippleLibSeed(key_str);
+            if (!seed)
+                seed = parseBase58<Seed>(key_str);
+            if (seed)
+            {
+                // this doesn't seem right... we should probably derive the public key from the secret key?
+                // TODO: we don't know the key type
+                sk = generateKeyPair(KeyType::ed25519, *seed).second;
+            }
+        }
+
+        if (sk) {
+            cfg.our_secret_key = *sk;
+        } else {
+            auto err = str(format(": %1% - invalid secret key") % fname);
+            throw std::runtime_error(err);
+        }
+        
+        cfg.port_peer = root.get<uint16_t>("port_peer");
+        cfg.port_ws = root.get<uint16_t>("port_ws");
+
+        cfg.ssk_keys_str = root.get<std::string>("__ssl_key");
+        cfg.ssk_cert_str = root.get<std::string>("__ssl_cert");
     }
 
     template <class PT_ROOT>
-    static void loadSNTPConfig(SNTPServerConfig &cfg, PT_ROOT const& root)
+    static void loadSNTPConfig(std::string const& fname, SNTPServerConfig &cfg, PT_ROOT const& root)
     {
     }
 
 #endif
     
-void AttnServer::loadConfig(std::string const& config_filename)
+void AttnServer::loadConfig(std::string const& fname)
 {
 #if defined(HAVE_BOOST_JSON)
-    std::ifstream t(config_filename);
+    std::ifstream t(fname);
     std::string const input(std::istreambuf_iterator<char>(t), {});
 
     namespace json = boost::json;
     boost::json::error_code ec;
     auto doc = boost::json::parse(input, ec);
-    if (ec || !doc.is_object())
-        throw std::runtime_error(str(format("error parsing config file: %1% - %2%") % config_filename % ec.message()));
+    if (ec || !doc.is_object()) {
+        auto err = str(format("error parsing config file: %1% - %2%") % fname % ec.message());
+        throw std::runtime_error(err);
+    }
 
     auto const& obj = doc.get_object();
     if (obj.contains("attn_server")) {
@@ -70,13 +120,13 @@ void AttnServer::loadConfig(std::string const& config_filename)
     namespace pt = boost::property_tree;
 
     pt::ptree root;
-    pt::read_json(config_filename, root);
+    pt::read_json(fname, root);
     auto const& att_root = root.get_child("attn_server");
     
-    loadChainConfig(cfg_.mainchain, att_root.get_child("mainchain"));
-    loadChainConfig(cfg_.sidechain, att_root.get_child("sidechain"));
-    loadServerConfig(cfg_, att_root.get_child("server"));
-    loadSNTPConfig(cfg_.sntp_servers, att_root.get_child("sntp_servers"));
+    loadChainConfig(fname, ChainType::mainChain, cfg_.mainchain, att_root.get_child("mainchain"));
+    loadChainConfig(fname, ChainType::sideChain, cfg_.sidechain, att_root.get_child("sidechain"));
+    loadServerConfig(fname, cfg_, att_root.get_child("server"));
+    loadSNTPConfig(fname, cfg_.sntp_servers, att_root.get_child("sntp_servers"));
 #endif
 }
 

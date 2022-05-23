@@ -1,7 +1,7 @@
 {"attn_server": {
     "server": { 
-        "public_key": "aKEkMFcHKoLccP3PeMWEKT7LGpCjT9CYwjosmo2f8e1M17KwznxG",
-        "secret_key": "sskH8Ap41pXLFoi9RUxV9V4iFURHX",
+        "public_key": "aKE3m5xrstjw2kZMVQ79AsGCEEp9tmPq18Ny3A84maQ2rRa5KE7i",
+        "secret_key": "ssvxJC1Hj86THvtugf5aF6B4fxA24",
         "port_peer": 51238,
         "port_ws": 6011,
         "__ssl_key": "/etc/ssl/private/server.key",

@@ -50,11 +50,11 @@ enum  ChainType { sideChain, mainChain };
 // --------------------------------------------------------------------
 struct ChainConfig
 {
-    ChainType type_;
+    ChainType chaintype;
     std::string ip;
     uint16_t port;
-    AccountID door_account;
     std::string door_account_str;
+    AccountID door_account;
 };
 
 struct PeerConfig {
@@ -69,8 +69,12 @@ struct AttnServerConfig
 {
     PublicKey our_public_key;
     SecretKey our_secret_key;
-    uint16_t  port; // that we listen for connections on
+    uint16_t  port_peer; 
+    uint16_t  port_ws;  
 
+    std::string ssk_keys_str;
+    std::string ssk_cert_str;
+    
     ChainConfig mainchain;
     ChainConfig sidechain;
 
