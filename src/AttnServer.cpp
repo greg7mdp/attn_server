@@ -1,65 +1,97 @@
 #include <AttnServer.h>
 #include <RPCServer.h>
 
+#include <boost/version.hpp>
 #include <boost/filesystem.hpp>
 #include <boost/format.hpp>
 #include <boost/asio.hpp>
+#include <boost/format.hpp>
+using boost::format;
 
-static std::string getEnvVar(char const* name)
-{
-    auto const v = getenv(name);
-    if (v != nullptr)
-        return { v };
-    return {};
-}
+#include <iostream>
+#include <fstream>
+#include <streambuf>
+
+#if (BOOST_VERSION / 100 % 1000) > 74
+    #define HAVE_BOOST_JSON
+#endif
+
+#ifdef HAVE_BOOST_JSON
+    #include <boost/json.hpp>
+    #include <boost/json/src.hpp>
+#else
+    #include <boost/property_tree/ptree.hpp>
+    #include <boost/property_tree/json_parser.hpp>
+#endif
 
 namespace ripple {
 namespace sidechain {
 
-AttnServer::AttnServer()
+AttnServer::AttnServer(std::string const& config_filename)
 {
-    loadConfig();
+    loadConfig(config_filename);
 }
 
-void AttnServer::loadConfig()
-{
-    std::string const homeDir = getEnvVar("HOME");
-    std::string const defaultNudbPath =
-        (homeDir.empty() ? boost::filesystem::current_path().string() : homeDir) +
-        "/.ripple/attn_server/nudb";
+#ifndef HAVE_BOOST_JSON
+    template <class PT_ROOT>
+    static void loadChainConfig(ChainConfig &cfg, PT_ROOT const& root)
+    {
+    }
+
+    template <class PT_ROOT>
+    static void loadServerConfig(AttnServerConfig &cfg, PT_ROOT const& root)
+    {
+    }
+
+    template <class PT_ROOT>
+    static void loadSNTPConfig(SNTPServerConfig &cfg, PT_ROOT const& root)
+    {
+    }
+
+#endif
     
-    // --------------- should be loaded from .cfg file --------------------------
-    static std::vector<std::string> peer_public_keys{
-        "aKEkMFcHKoLccP3PeMWEKT7LGpCjT9CYwjosmo2f8e1M17KwznxG",
-        "aKGWPfe6xHXuH5BAALh1CRZHRKxUf4Lc2sGr5RY7ok68LTeehVQN",
-        "aKECvjC2fpvYXwDEjFfM88r6mcTEWi8QLJG4BrwfWxzWocgWDACW",
-        "aKEQ5XRxaVq6XQwZ3p3WYrxZCb4SMEW3z4rjYT3LnFtyihm4BreC",
-        "aKEyRPH8uRMrXvzuEVXzzjiBH6czFEeytC7QmAaizj5fhAYq7nHS"};
+void AttnServer::loadConfig(std::string const& config_filename)
+{
+#if defined(HAVE_BOOST_JSON)
+    std::ifstream t(config_filename);
+    std::string const input(std::istreambuf_iterator<char>(t), {});
 
-    static std::vector<std::string> peer_secret_keys{
-        "sskH8Ap41pXLFoi9RUxV9V4iFURHX",
-        "safwSMn1NWC13He3Kde5GXXB52B2K",
-        "shA5avWzSCVXfazdtQ1eunYKHZ7WG",
-        "ssPS3FAbyhifxYFZeNufya4NsaL5g",
-        "shsqhawQM2zGBoYeh8wpHB8c5pEAd"};
+    namespace json = boost::json;
+    boost::json::error_code ec;
+    auto doc = boost::json::parse(input, ec);
+    if (ec || !doc.is_object())
+        throw std::runtime_error(str(format("error parsing config file: %1% - %2%") % config_filename % ec.message()));
 
-    static std::string signing_key{"safwSMn1NWC13He3Kde5GXXB52B2K"};
-    static std::string mainchain_account{"rEEw6AmPHD28M5AHyrzFSVoLA3oANcmYas"};
-    static std::string mainchain_ip{"127.0.0.1"};
-    static std::string mainchain_port_ws{"6007"};
-    // --------------------------------------------------------------------------
+    auto const& obj = doc.get_object();
+    if (obj.contains("attn_server")) {
+    }
+    
+#else
+    namespace pt = boost::property_tree;
 
-    cfg_.sntp_servers = {"time.windows.com", "time.apple.com", "time.nist.gov", "pool.ntp.org"};
-
-    cfg_.db_path = "C:/greg/ripple/att_svr/nudb";
+    pt::ptree root;
+    pt::read_json(config_filename, root);
+    auto const& att_root = root.get_child("attn_server");
+    
+    loadChainConfig(cfg_.mainchain, att_root.get_child("mainchain"));
+    loadChainConfig(cfg_.sidechain, att_root.get_child("sidechain"));
+    loadServerConfig(cfg_, att_root.get_child("server"));
+    loadSNTPConfig(cfg_.sntp_servers, att_root.get_child("sntp_servers"));
+#endif
 }
 
 
 void AttnServer::mainLoop()
 {
-    boost::asio::io_context io_context;
-    RPCServer rpc_server(io_context, *this);
-    io_context.run();
+    const int num_threads = 4;
+    boost::asio::io_context ioc(num_threads);
+    
+    RPCServer rpc_server(ioc, *this);
+
+    std::vector<std::thread> v;
+    for(int i = 1; i<num_threads; ++i)
+        v.emplace_back([&ioc] () { ioc.run(); });
+    ioc.run();
 }
 
 }

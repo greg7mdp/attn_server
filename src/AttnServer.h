@@ -44,22 +44,47 @@ namespace sidechain {
 class MainchainListener;
 class SidechainListener;
 
+enum  ChainType { sideChain, mainChain };
+
+// --------------------------------------------------------------------
+// --------------------------------------------------------------------
+struct ChainConfig
+{
+    ChainType type_;
+    std::string ip;
+    uint16_t port;
+    AccountID door_account;
+    std::string door_account_str;
+};
+
+struct PeerConfig {
+    std::string ip;
+    uint16_t port;
+    PublicKey public_key;
+};
+
+using SNTPServerConfig = std::vector<std::string>;
+
 struct AttnServerConfig
 {
-    PublicKey public_key;
-    SecretKey secret_key;
+    PublicKey our_public_key;
+    SecretKey our_secret_key;
+    uint16_t  port; // that we listen for connections on
 
-    std::vector<PublicKey> peer_public_keys;
-    std::vector<SecretKey> peer_secret_key;
-    std::vector<std::string> sntp_servers;
+    ChainConfig mainchain;
+    ChainConfig sidechain;
+
+    std::vector<PeerConfig> peers;
+    SNTPServerConfig sntp_servers;
 
     std::string db_path;
 
 };
 
-enum  ChainType { sideChain, mainChain };
 enum class UnlockMainLoopKey { app, mainChain, sideChain };
 
+// --------------------------------------------------------------------
+// --------------------------------------------------------------------
 class AttnServer
 {
 public:
@@ -75,9 +100,7 @@ private:
     std::shared_ptr<SidechainListener> sidechainListener_;
 
 public:
-    AttnServer();
-
-    ~AttnServer();
+    AttnServer(std::string const& config_filename);
 
     void start();
 
@@ -136,7 +159,7 @@ public:
 
 
 private:
-    void loadConfig();
+    void loadConfig(std::string const& config_filename);
 };
 
 [[nodiscard]] static inline ChainType srcChainType(event::Dir dir)

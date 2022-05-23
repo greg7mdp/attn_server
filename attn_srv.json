@@ -18,7 +18,6 @@
         "port_ws": 6007
     },
     "sntp_servers": ["time.windows.com", "time.apple.com", "time.nist.gov", "pool.ntp.org"]
-    }
-}
+}}
 
 

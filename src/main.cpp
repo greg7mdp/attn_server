@@ -72,7 +72,13 @@ std::string const& getVersionString()
     return value;
 }
 
-
+static std::string getEnvVar(char const* name)
+{
+    auto const v = getenv(name);
+    if (v != nullptr)
+        return { v };
+    return {};
+}
 
 static int runUnitTests()
 {
@@ -144,7 +150,7 @@ int main(int argc, char** argv)
         return 0;
     }
 
-    if (vm.count("help") || ! vm.count("command"))
+    if (vm.count("help"))
     {
         printHelp(general);
         return EXIT_SUCCESS;
@@ -152,7 +158,14 @@ int main(int argc, char** argv)
 
     try
     {
-        ripple::sidechain::AttnServer attn_server;
+        std::string config_filename;
+        if (vm.count("config"))
+            config_filename = vm["config"].as<std::string>();
+        else {
+            config_filename = getEnvVar("h");
+            config_filename += "/github/ripple/attn_server/attn_srv.json";
+        }
+        ripple::sidechain::AttnServer attn_server(config_filename);
         attn_server.mainLoop();
     }
     catch(std::exception const& e)

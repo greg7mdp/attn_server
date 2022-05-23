@@ -1,7 +1,6 @@
 //------------------------------------------------------------------------------
 /*
-    This file is part of rippled: https://github.com/ripple/rippled
-    Copyright (c) 2021 Ripple Labs Inc.
+    Copyright (c) 2022 Ripple Labs Inc.
 
     Permission to use, copy, modify, and/or distribute this software for any
     purpose  with  or without fee is hereby granted, provided that the above
@@ -60,8 +59,7 @@ ChainListener::ChainListener(
 // WebsocketClient won't work)
 ChainListener::~ChainListener() = default;
 
-std::string const&
-ChainListener::chainName() const
+std::string const& ChainListener::chainName() const
 {
     // Note: If this function is ever changed to return a value instead of a
     // ref, review the code to ensure the "jv" functions don't bind to temps
@@ -71,19 +69,17 @@ ChainListener::chainName() const
 }
 
 namespace detail {
+    
 template <class T>
-std::optional<T>
-getMemoData(Json::Value const& v, std::uint32_t index) = delete;
+std::optional<T> getMemoData(Json::Value const& v, std::uint32_t index) = delete;
 
 template <>
-std::optional<uint256>
-getMemoData<uint256>(Json::Value const& v, std::uint32_t index)
+std::optional<uint256> getMemoData<uint256>(Json::Value const& v, std::uint32_t index)
 {
     try
     {
         uint256 result;
-        if (result.parseHex(
-                v[jss::Memos][index][jss::Memo][jss::MemoData].asString()))
+        if (result.parseHex(v[jss::Memos][index][jss::Memo][jss::MemoData].asString()))
             return result;
     }
     catch (...)
@@ -93,13 +89,11 @@ getMemoData<uint256>(Json::Value const& v, std::uint32_t index)
 }
 
 template <>
-std::optional<uint8_t>
-getMemoData<uint8_t>(Json::Value const& v, std::uint32_t index)
+std::optional<uint8_t> getMemoData<uint8_t>(Json::Value const& v, std::uint32_t index)
 {
     try
     {
-        auto const hexData =
-            v[jss::Memos][index][jss::Memo][jss::MemoData].asString();
+        auto const hexData = v[jss::Memos][index][jss::Memo][jss::MemoData].asString();
         auto d = hexData.data();
         if (hexData.size() != 2)
             return {};
@@ -118,11 +112,7 @@ getMemoData<uint8_t>(Json::Value const& v, std::uint32_t index)
 }  // namespace detail
 
 template <class E>
-void
-ChainListener::pushEvent(
-    E&& e,
-    int txHistoryIndex,
-    std::lock_guard<std::mutex> const&)
+void ChainListener::pushEvent(E&& e, int txHistoryIndex, std::lock_guard<std::mutex> const&)
 {
     static_assert(std::is_rvalue_reference_v<decltype(e)>, "");
 
@@ -138,61 +128,30 @@ ChainListener::pushEvent(
     }
 }
 
-void
-ChainListener::processMessage(Json::Value const& msg)
+void ChainListener::processMessage(Json::Value const& msg)
 {
     // Even though this lock has a large scope, this function does very little
     // processing and should run relatively quickly
     std::lock_guard l{m_};
 
-    JLOGV(
-        j_.trace(),
-        "chain listener message",
-        jv("msg", msg),
-        jv("isMainchain", isMainchain_));
+    JLOGV(j_.trace(), "chain listener message", jv("msg", msg), jv("isMainchain", isMainchain_));
 
-    if (!msg.isMember(jss::validated) || !msg[jss::validated].asBool())
-    {
-        JLOGV(
-            j_.trace(),
-            "ignoring listener message",
-            jv("reason", "not validated"),
-            jv("msg", msg),
-            jv("chain_name", chainName()));
-        return;
-    }
-
-    if (!msg.isMember(jss::engine_result_code))
-    {
-        JLOGV(
-            j_.trace(),
-            "ignoring listener message",
-            jv("reason", "no engine result code"),
-            jv("msg", msg),
-            jv("chain_name", chainName()));
-        return;
-    }
-
-    if (!msg.isMember(jss::account_history_tx_index))
-    {
-        JLOGV(
-            j_.trace(),
-            "ignoring listener message",
-            jv("reason", "no account history tx index"),
-            jv("msg", msg),
-            jv("chain_name", chainName()));
-        return;
-    }
-
-    if (!msg.isMember(jss::meta))
-    {
-        JLOGV(
-            j_.trace(),
-            "ignoring listener message",
-            jv("reason", "tx meta"),
-            jv("msg", msg),
-            jv("chain_name", chainName()));
-        return;
+    std::array<std::pair<bool, char const *>, 4> checks {{
+        { msg.isMember(jss::validated) && msg[jss::validated].asBool(),  "not validated" },
+        { msg.isMember(jss::engine_result_code),  "no engine result code" },
+        { msg.isMember(jss::account_history_tx_index),  "no account history tx index" },
+        { msg.isMember(jss::meta),  "tx meta" }}};
+    
+    for ( auto check : checks) {
+        if (!check.first) {
+            JLOGV(
+                j_.trace(),
+                "ignoring listener message",
+                jv("reason", check.second),
+                jv("msg", msg),
+                jv("chain_name", chainName()));
+            return;
+        }
     }
 
     auto fieldMatchesStr =
@@ -237,15 +196,14 @@ ChainListener::processMessage(Json::Value const& msg)
 
         if (!msg.isMember(jss::transaction))
             return {};
+        
         auto const txn = msg[jss::transaction];
 
         if (!fieldMatchesStr(txn, jss::TransactionType, "Payment"))
             return {};
 
-        bool const accIsSrc =
-            fieldMatchesStr(txn, jss::Account, doorAccountStr_.c_str());
-        bool const accIsDst =
-            fieldMatchesStr(txn, jss::Destination, doorAccountStr_.c_str());
+        bool const accIsSrc = fieldMatchesStr(txn, jss::Account, doorAccountStr_.c_str());
+        bool const accIsDst = fieldMatchesStr(txn, jss::Destination, doorAccountStr_.c_str());
 
         if (accIsSrc == accIsDst)
         {

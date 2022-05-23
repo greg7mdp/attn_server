@@ -1,7 +1,6 @@
 //------------------------------------------------------------------------------
 /*
-    This file is part of rippled: https://github.com/ripple/rippled
-    Copyright (c) 2021 Ripple Labs Inc.
+    Copyright (c) 2022 Ripple Labs Inc.
 
     Permission to use, copy, modify, and/or distribute this software for any
     purpose  with  or without fee is hereby granted, provided that the above
@@ -43,11 +42,13 @@ protected:
     enum class IsMainchain { no, yes };
 
     bool const isMainchain_;
+    
     // Sending xrp to the door account will trigger a x-chain transaction
     AccountID const doorAccount_;
     std::string const doorAccountStr_;
     std::weak_ptr<AttnServer> attn_server_;
     mutable std::mutex m_;
+    
     // Logic to handle potentially collecting and replaying historical
     // transactions. Will be empty after replaying.
     std::unique_ptr<InitialSync> GUARDED_BY(m_) initialSync_;
@@ -61,25 +62,18 @@ protected:
 
     virtual ~ChainListener();
 
-    std::string const&
-    chainName() const;
+    std::string const& chainName() const;
 
-    void
-    processMessage(Json::Value const& msg) EXCLUDES(m_);
+    void processMessage(Json::Value const& msg) EXCLUDES(m_);
 
     template <class E>
-    void
-    pushEvent(E&& e, int txHistoryIndex, std::lock_guard<std::mutex> const&)
-        REQUIRES(m_);
+    void pushEvent(E&& e, int txHistoryIndex, std::lock_guard<std::mutex> const&) REQUIRES(m_);
 
 public:
-    void
-    setLastXChainTxnWithResult(uint256 const& hash) EXCLUDES(m_);
-    void
-    setNoLastXChainTxnWithResult() EXCLUDES(m_);
+    void setLastXChainTxnWithResult(uint256 const& hash) EXCLUDES(m_);
+    void setNoLastXChainTxnWithResult() EXCLUDES(m_);
 
-    Json::Value
-    getInfo() const EXCLUDES(m_);
+    Json::Value getInfo() const EXCLUDES(m_);
 
     using RpcCallback = std::function<void(Json::Value const&)>;
 
@@ -89,11 +83,7 @@ public:
      * @param params RPC command parameter
      * @param onResponse callback to process RPC result
      */
-    virtual void
-    send(
-        std::string const& cmd,
-        Json::Value const& params,
-        RpcCallback onResponse) = 0;
+    virtual void send(std::string const& cmd, Json::Value const& params, RpcCallback onResponse) = 0;
 };
 
 }  // namespace sidechain
