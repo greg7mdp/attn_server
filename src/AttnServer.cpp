@@ -8,11 +8,13 @@
 #include <boost/format.hpp>
 using boost::format;
 
+#include <boost/iostreams/stream.hpp>
+
 #include <iostream>
 #include <fstream>
 #include <streambuf>
 
-#if (BOOST_VERSION / 100 % 1000) > 74
+#if 0 && (BOOST_VERSION / 100 % 1000) > 74
     #define HAVE_BOOST_JSON
 #endif
 
@@ -98,6 +100,41 @@ AttnServer::AttnServer(std::string const& fname)
 
 #endif
     
+std::string AttnServer::process_rpc_request(std::string_view data)
+{
+    namespace pt = boost::property_tree;
+    pt::ptree request;
+    boost::iostreams::array_source as(data.data(), data.size());
+    boost::iostreams::stream<boost::iostreams::array_source> is(as);
+    
+    pt::read_json(is, request);
+    
+    std::string error_msg;
+    uint32_t error_code = 0;
+    pt::ptree result;
+    
+    try
+    {
+        
+    }
+    catch(std::exception const& e)
+    {
+        error_code = 1;
+        error_msg = e.what();
+    }
+
+    result.put("error_code", error_code);
+    result.put("error_msg", error_msg.c_str());
+    result.push_back(request.front());
+    
+    pt::ptree resp;
+    resp.add_child("result", result);
+
+    std::stringstream ss;
+    pt::json_parser::write_json(ss, resp);
+    return ss.str();
+}
+
 void AttnServer::loadConfig(std::string const& fname)
 {
 #if defined(HAVE_BOOST_JSON)

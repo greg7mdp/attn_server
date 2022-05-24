@@ -106,6 +106,8 @@ private:
 public:
     AttnServer(std::string const& config_filename);
 
+    std::string process_rpc_request(std::string_view data);
+
     void start();
 
     void stop() EXCLUDES(m_);

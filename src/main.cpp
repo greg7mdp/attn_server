@@ -103,6 +103,7 @@ int main(int argc, char** argv)
     general.add_options()
     ("help,h", "Display this message.")
     ("config", po::value<std::string>(), "Specify the config file.")
+    ("request", po::value<std::string>(), "Execute provided request and outputs json result")
     ("unittest,u", "Perform unit tests.")
     ("version", "Display the build version.")
     ;
@@ -166,6 +167,12 @@ int main(int argc, char** argv)
             config_filename += "/github/ripple/attn_server/attn_srv.json";
         }
         ripple::sidechain::AttnServer attn_server(config_filename);
+        if (vm.count("request")) {
+            std::string request { vm["request"].as<std::string>() };
+            auto res = attn_server.process_rpc_request(request);
+            std::cout << res << std::endl;
+            return EXIT_SUCCESS;
+        }
         attn_server.mainLoop();
     }
     catch(std::exception const& e)
