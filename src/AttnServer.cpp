@@ -41,9 +41,9 @@ AttnServer::AttnServer(std::string const& fname)
                                 ChainConfig &cfg, PT_ROOT const& root)
     {
         cfg.chaintype = chaintype;
-        cfg.ip = root.get<std::string>("ip");
-        cfg.port = root.get<uint16_t>("port_ws");
-        cfg.door_account_str = root.get<std::string>("door_account");
+        cfg.ip = root.template get<std::string>("ip");
+        cfg.port = root.template get<uint16_t>("port_ws");
+        cfg.door_account_str = root.template get<std::string>("door_account");
         auto acct = parseBase58<AccountID>(cfg.door_account_str);
         if (acct)
             cfg.door_account = *acct;
@@ -56,7 +56,7 @@ AttnServer::AttnServer(std::string const& fname)
     template <class PT_ROOT>
     static void loadServerConfig(std::string const& fname, AttnServerConfig &cfg, PT_ROOT const& root)
     {
-        cfg.our_public_key_str = root.get<std::string>("public_key");
+        cfg.our_public_key_str = root.template get<std::string>("public_key");
         auto pk = parseBase58<PublicKey>(TokenType::AccountPublic, cfg.our_public_key_str);
         
         if (pk) {
@@ -66,7 +66,7 @@ AttnServer::AttnServer(std::string const& fname)
             throw std::runtime_error(err);
         }
 
-        auto key_str = root.get<std::string>("secret_key");
+        auto key_str = root.template get<std::string>("secret_key");
         auto sk = parseBase58<SecretKey>(TokenType::AccountSecret, key_str);
     
         if (!sk) {
@@ -89,11 +89,11 @@ AttnServer::AttnServer(std::string const& fname)
             throw std::runtime_error(err);
         }
         
-        cfg.port_peer = root.get<uint16_t>("port_peer");
-        cfg.port_ws = root.get<uint16_t>("port_ws");
+        cfg.port_peer = root.template get<uint16_t>("port_peer");
+        cfg.port_ws = root.template get<uint16_t>("port_ws");
 
-        cfg.ssk_keys_str = root.get<std::string>("__ssl_key");
-        cfg.ssk_cert_str = root.get<std::string>("__ssl_cert");
+        cfg.ssk_keys_str = root.template get<std::string>("__ssl_key");
+        cfg.ssk_cert_str = root.template get<std::string>("__ssl_cert");
     }
 
     template <class PT_ROOT>
@@ -120,8 +120,8 @@ std::string AttnServer::process_rpc_request(std::string_view data)
     try
     {
         auto req = request.get_child("request");
-        auto door_account = req.get<std::string>("door_account");
-        auto tx_hash = req.get<std::string>("tx_hash");
+        auto door_account = req.template get<std::string>("door_account");
+        auto tx_hash = req.template get<std::string>("tx_hash");
 
 
         // sign tx (for now we'll just sign the hash)
