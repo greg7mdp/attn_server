@@ -67,6 +67,7 @@ using SNTPServerConfig = std::vector<std::string>;
 
 struct AttnServerConfig
 {
+    std::string our_public_key_str;
     PublicKey our_public_key;
     SecretKey our_secret_key;
     uint16_t  port_peer; 

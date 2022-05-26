@@ -55,7 +55,8 @@ AttnServer::AttnServer(std::string const& fname)
     template <class PT_ROOT>
     static void loadServerConfig(std::string const& fname, AttnServerConfig &cfg, PT_ROOT const& root)
     {
-        auto pk = parseBase58<PublicKey>(TokenType::AccountPublic, root.get<std::string>("public_key"));
+        cfg.our_public_key_str = root.get<std::string>("public_key");
+        auto pk = parseBase58<PublicKey>(TokenType::AccountPublic, cfg.our_public_key_str);
         
         if (pk) {
             cfg.our_public_key = *pk;
@@ -103,19 +104,26 @@ AttnServer::AttnServer(std::string const& fname)
 std::string AttnServer::process_rpc_request(std::string_view data)
 {
     namespace pt = boost::property_tree;
-    pt::ptree request;
     boost::iostreams::array_source as(data.data(), data.size());
     boost::iostreams::stream<boost::iostreams::array_source> is(as);
+    pt::ptree request;
     
     pt::read_json(is, request);
     
     std::string error_msg;
     uint32_t error_code = 0;
     pt::ptree result;
-    
+
+    Buffer signature;
     try
     {
-        
+        auto req = request.get_child("request");
+        auto door_account = req.get<std::string>("door_account");
+        auto tx_hash = req.get<std::string>("tx_hash");
+
+
+        // sign tx (for now we'll just sign the hash)
+        signature = sign(cfg_.our_public_key, cfg_.our_secret_key, makeSlice(tx_hash));
     }
     catch(std::exception const& e)
     {
@@ -126,6 +134,12 @@ std::string AttnServer::process_rpc_request(std::string_view data)
     result.put("error_code", error_code);
     result.put("error_msg", error_msg.c_str());
     result.push_back(request.front());
+
+    if (signature.size()) {
+        std::string signature_str { (char *)signature.data(), signature.size() };
+        result.put("signature", signature_str);
+        result.put("signing_public", cfg_.our_public_key_str);
+     }
     
     pt::ptree resp;
     resp.add_child("result", result);

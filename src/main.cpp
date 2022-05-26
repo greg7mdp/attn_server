@@ -168,7 +168,7 @@ int main(int argc, char** argv)
         }
         ripple::sidechain::AttnServer attn_server(config_filename);
         if (vm.count("request")) {
-            // ex: --request "{\"request\": { \"door_str\": \"rEEw6AmPHD28M5AHyrzFSVoLA3oANcmYas\", \"hash\": {\"src_chain_door\" : \"rEEw6AmPHD28M5AHyrzFSVoLA3oANcmYas\", \"src_chain_issue\": \"XRP\", \"dst_chain_door\" :  \"rEEw6AmPHD28M5AHyrzFSVoLA3oANcmYas\", \"dst_chain_issue\": \"XRP\"}, \"amount\":  { \"value\": \"13.1\", \"currency\": \"FOO\", \"issuer\": \"rf1BiGeXwwQoi8Z2ueFYTEXSwuJYfV2Jpn\" }, \"xchain_sequence_number\": \"22\"} }"
+            // ex: --request "{\"request\": { \"door_account\": \"rEEw6AmPHD28M5AHyrzFSVoLA3oANcmYas\", \"tx_hash\": \"D638208ADBD04CBB10DE7B645D3AB4BA31489379411A3A347151702B6401AA78\"} }"
             std::string request { vm["request"].as<std::string>() };
             auto res = attn_server.process_rpc_request(request);
             std::cout << res << std::endl;
