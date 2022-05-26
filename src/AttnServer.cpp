@@ -123,9 +123,16 @@ std::string AttnServer::process_rpc_request(std::string_view data)
         auto door_account = req.template get<std::string>("door_account");
         auto tx_hash = req.template get<std::string>("tx_hash");
 
-
+        // todo: get all the info from the tx
+        STSidechain sidechain;
+        STAmount amount;
+        std::uint32_t xChainSeqNum;
+        bool wasSrcChainSend;
+        
+        auto const toSign = ChainClaimProofMessage(sidechain, amount, xChainSeqNum, wasSrcChainSend);
+        
         // sign tx (for now we'll just sign the hash)
-        signature = sign(cfg_.our_public_key, cfg_.our_secret_key, makeSlice(tx_hash));
+        signature = sign(cfg_.our_public_key, cfg_.our_secret_key, makeSlice(toSign));
     }
     catch(std::exception const& e)
     {
