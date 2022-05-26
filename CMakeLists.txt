@@ -47,7 +47,7 @@ if (NOT has_parent)
     # rippled version to download. Default tag is develop/master/release as 
     # determined by the branch of this project
     if (NOT (_branch STREQUAL "master" OR _branch STREQUAL "release"))
-      set (rippled_tag "sidechain" CACHE STRING
+      set (rippled_tag "attest" CACHE STRING
         "tag/commit of rippled to fetch from if a local install is not found")
     else ()
       set (rippled_tag "${_branch}" CACHE STRING
@@ -58,7 +58,7 @@ if (NOT has_parent)
     include (FetchContent)
     FetchContent_Declare(
       rippled_src
-      GIT_REPOSITORY https://github.com/ripple/rippled.git
+      GIT_REPOSITORY https://github.com/seelabs/rippled.git
       GIT_TAG ${rippled_tag}
     )
     FetchContent_GetProperties(rippled_src)

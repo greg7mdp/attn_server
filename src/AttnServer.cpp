@@ -13,6 +13,7 @@ using boost::format;
 #include <iostream>
 #include <fstream>
 #include <streambuf>
+#include <string>
 
 #if 0 && (BOOST_VERSION / 100 % 1000) > 74
     #define HAVE_BOOST_JSON
@@ -69,7 +70,8 @@ AttnServer::AttnServer(std::string const& fname)
         auto sk = parseBase58<SecretKey>(TokenType::AccountSecret, key_str);
     
         if (!sk) {
-            std::optional<Seed> seed = parseRippleLibSeed(key_str);
+            //std::optional<Seed> seed = parseRippleLibSeed(key_str);
+            std::optional<Seed> seed = parseGenericSeed(key_str);
             if (!seed)
                 seed = parseBase58<Seed>(key_str);
             if (seed)
