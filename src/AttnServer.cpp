@@ -146,6 +146,7 @@ std::string AttnServer::process_rpc_request(std::string_view sv)
         
         // sign tx (for now we'll just sign the hash)
         signature = sign(cfg_.our_public_key, cfg_.our_secret_key, makeSlice(toSign));
+        
     }
     catch(std::exception const& e)
     {
@@ -159,7 +160,7 @@ std::string AttnServer::process_rpc_request(std::string_view sv)
 
     if (signature.size()) {
         std::string signature_str { (char *)signature.data(), signature.size() };
-        result[jss::signature] = signature_str;
+        result[jss::signature] = strHex(signature_str);
         result[jss::signing_key] = cfg_.our_public_key_str;
      }
     
