@@ -19,6 +19,7 @@ using boost::format;
 #include <ripple/json/json_reader.h>
 #include <ripple/json/json_value.h>
 #include <ripple/json/json_writer.h>
+#include <ripple/json/Writer.h>
 
 #if 0 && (BOOST_VERSION / 100 % 1000) > 74
     #define HAVE_BOOST_JSON
@@ -122,20 +123,20 @@ std::string AttnServer::process_rpc_request(std::string_view sv)
         Json::Reader reader;
         
         reader.parse(sv.data(), sv.data() + sv.size(), request);
-        auto req = request["request"];
+        auto req = request[jss::request];
 
-        // parse "dst_door"
-        std::string dst_door_str = req["dst_door"].asString();
+        // parse dst door
+        std::string dst_door_str = req[jss::dst_chain_door].asString();
         auto dst_door = parseBase58<AccountID>(dst_door_str);
         
-        // parse "sidechain"
+        // parse sidechain
         auto sidechain = STSidechainFromJson(sfSidechain, req[jss::sidechain]);
 
         // parse amount
         STAmount amount = amountFromJson(sfAmount, req[jss::amount]);
 
         // parse xchain_sequence_number
-        auto xChainSeqNum = req["xchain_sequence_number"].asUInt();
+        auto xChainSeqNum = req[jss::xchain_seq].asUInt();
 
         bool wasSrcChainSend = (dst_door == sidechain.srcChainDoor());
         
@@ -152,75 +153,25 @@ std::string AttnServer::process_rpc_request(std::string_view sv)
         error_msg = e.what();
     }
     
-    
-    return {};
-#if 0  
-    namespace pt = boost::property_tree;
-    boost::iostreams::array_source as(data.data(), data.size());
-    boost::iostreams::stream<boost::iostreams::array_source> is(as);
-    pt::ptree request;
-    
-    pt::read_json(is, request);
-    
-    std::string error_msg;
-    uint32_t error_code = 0;
-    pt::ptree result;
-
-    Buffer signature;
-    try
-    {
-        auto req = request.get_child("request");
-
-        // parse "dst_door"
-        auto dst_door_str = req.template get<std::string>("dst_door");
-        auto dst_door = parseBase58<AccountID>(dst_door_str);
-        
-        // parse "sidechain"
-        auto sidechain_root = req.get_child("sidechain");
-        auto sidechain_src_door = parseBase58<AccountID>(sidechain_root.template get<std::string>("src_chain_door"));
-        auto sidechain_dst_door = parseBase58<AccountID>(sidechain_root.template get<std::string>("dst_chain_door"));
-        auto src_issue = parseIssue(sidechain_root.get_child("src_chain_issue"));
-        auto dst_issue = parseIssue(sidechain_root.get_child("dst_chain_issue"));
-        STSidechain sidechain(*sidechain_src_door, src_issue, *sidechain_dst_door, dst_issue);
-
-        // parse amount
-        STAmount amount = parseAmount(sidechain_root.get_child("amount"));
-
-        // parse xchain_sequence_number
-        auto xChainSeqNum =  req.template get<std::uint32_t>("xchain_sequence_number");
-
-        bool wasSrcChainSend = (dst_door == sidechain_src_door);
-        
-        // todo: get all the info from the tx
-
-        auto const toSign = ChainClaimProofMessage(sidechain, amount, xChainSeqNum, wasSrcChainSend);
-        
-        // sign tx (for now we'll just sign the hash)
-        signature = sign(cfg_.our_public_key, cfg_.our_secret_key, makeSlice(toSign));
-    }
-    catch(std::exception const& e)
-    {
-        error_code = 1;
-        error_msg = e.what();
-    }
-
-    result.put("error_code", error_code);
-    result.put("error_msg", error_msg.c_str());
-    result.push_back(request.front());
+    result[jss::error_code] = error_code;
+    result[jss::error_message] = error_msg;
+    result[jss::request] = request[jss::request];
 
     if (signature.size()) {
         std::string signature_str { (char *)signature.data(), signature.size() };
-        result.put("signature", signature_str);
-        result.put("signing_public", cfg_.our_public_key_str);
+        result[jss::signature] = signature_str;
+        result[jss::signing_key] = cfg_.our_public_key_str;
      }
     
-    pt::ptree resp;
-    resp.add_child("result", result);
+    std::string output;
 
-    std::stringstream ss;
-    pt::json_parser::write_json(ss, resp);
-    return ss.str();
-#endif
+    {
+        Json::Writer writer(Json::stringOutput(output));
+        writer.startRoot(Json::Writer::object);
+        writer.set("result", result);
+        writer.finish();
+    }
+    return output;
 }
 
 void AttnServer::loadConfig(std::string const& fname)
