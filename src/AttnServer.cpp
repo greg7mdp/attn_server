@@ -15,6 +15,11 @@ using boost::format;
 #include <streambuf>
 #include <string>
 
+#include <ripple/protocol/jss.h>
+#include <ripple/json/json_reader.h>
+#include <ripple/json/json_value.h>
+#include <ripple/json/json_writer.h>
+
 #if 0 && (BOOST_VERSION / 100 % 1000) > 74
     #define HAVE_BOOST_JSON
 #endif
@@ -104,24 +109,52 @@ AttnServer::AttnServer(std::string const& fname)
     
 #endif
     
-template <class PT_ROOT>
-static Issue parseIssue(PT_ROOT const& root)
+std::string AttnServer::process_rpc_request(std::string_view sv)
 {
-    auto xrp = root.template get_value_optional<std::string>();
-    if (xrp)
-        return {};
+    std::string error_msg;
+    uint32_t error_code = 0;
+    Json::Value request;
+    Json::Value result;
+    Buffer signature;
+    
+    try
+    {
+        Json::Reader reader;
+        
+        reader.parse(sv.data(), sv.data() + sv.size(), request);
+        auto req = request["request"];
+
+        // parse "dst_door"
+        std::string dst_door_str = req["dst_door"].asString();
+        auto dst_door = parseBase58<AccountID>(dst_door_str);
+        
+        // parse "sidechain"
+        auto sidechain = STSidechainFromJson(sfSidechain, req[jss::sidechain]);
+
+        // parse amount
+        STAmount amount = amountFromJson(sfAmount, req[jss::amount]);
+
+        // parse xchain_sequence_number
+        auto xChainSeqNum = req["xchain_sequence_number"].asUInt();
+
+        bool wasSrcChainSend = (dst_door == sidechain.srcChainDoor());
+        
+        // todo: get all the info from the tx
+
+        auto const toSign = ChainClaimProofMessage(sidechain, amount, xChainSeqNum, wasSrcChainSend);
+        
+        // sign tx (for now we'll just sign the hash)
+        signature = sign(cfg_.our_public_key, cfg_.our_secret_key, makeSlice(toSign));
+    }
+    catch(std::exception const& e)
+    {
+        error_code = 1;
+        error_msg = e.what();
+    }
+    
+    
     return {};
-}
-
-template <class PT_ROOT>
-static STAmount parseAmount(PT_ROOT const& root)
-{
-    return { XRPAmount(10000000) };
-}
-
-
-std::string AttnServer::process_rpc_request(std::string_view data)
-{
+#if 0  
     namespace pt = boost::property_tree;
     boost::iostreams::array_source as(data.data(), data.size());
     boost::iostreams::stream<boost::iostreams::array_source> is(as);
@@ -187,6 +220,7 @@ std::string AttnServer::process_rpc_request(std::string_view data)
     std::stringstream ss;
     pt::json_parser::write_json(ss, resp);
     return ss.str();
+#endif
 }
 
 void AttnServer::loadConfig(std::string const& fname)
