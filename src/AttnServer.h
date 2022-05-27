@@ -27,6 +27,7 @@
 #include <ripple/protocol/Quality.h>
 #include <ripple/protocol/STAmount.h>
 #include <ripple/protocol/SecretKey.h>
+#include <ripple/protocol/STXChainClaimProof.h>
 
 #include <boost/container/flat_map.hpp>
 

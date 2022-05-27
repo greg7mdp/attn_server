@@ -101,8 +101,25 @@ AttnServer::AttnServer(std::string const& fname)
     {
     }
 
+    
 #endif
     
+template <class PT_ROOT>
+static Issue parseIssue(PT_ROOT const& root)
+{
+    auto xrp = root.template get_value_optional<std::string>();
+    if (xrp)
+        return {};
+    return {};
+}
+
+template <class PT_ROOT>
+static STAmount parseAmount(PT_ROOT const& root)
+{
+    return { XRPAmount(10000000) };
+}
+
+
 std::string AttnServer::process_rpc_request(std::string_view data)
 {
     namespace pt = boost::property_tree;
@@ -120,15 +137,29 @@ std::string AttnServer::process_rpc_request(std::string_view data)
     try
     {
         auto req = request.get_child("request");
-        auto door_account = req.template get<std::string>("door_account");
-        auto tx_hash = req.template get<std::string>("tx_hash");
 
-        // todo: get all the info from the tx
-        STSidechain sidechain;
-        STAmount amount;
-        std::uint32_t xChainSeqNum;
-        bool wasSrcChainSend;
+        // parse "dst_door"
+        auto dst_door_str = req.template get<std::string>("dst_door");
+        auto dst_door = parseBase58<AccountID>(dst_door_str);
         
+        // parse "sidechain"
+        auto sidechain_root = req.get_child("sidechain");
+        auto sidechain_src_door = parseBase58<AccountID>(sidechain_root.template get<std::string>("src_chain_door"));
+        auto sidechain_dst_door = parseBase58<AccountID>(sidechain_root.template get<std::string>("dst_chain_door"));
+        auto src_issue = parseIssue(sidechain_root.get_child("src_chain_issue"));
+        auto dst_issue = parseIssue(sidechain_root.get_child("dst_chain_issue"));
+        STSidechain sidechain(*sidechain_src_door, src_issue, *sidechain_dst_door, dst_issue);
+
+        // parse amount
+        STAmount amount = parseAmount(sidechain_root.get_child("amount"));
+
+        // parse xchain_sequence_number
+        auto xChainSeqNum =  req.template get<std::uint32_t>("xchain_sequence_number");
+
+        bool wasSrcChainSend = (dst_door == sidechain_src_door);
+        
+        // todo: get all the info from the tx
+
         auto const toSign = ChainClaimProofMessage(sidechain, amount, xChainSeqNum, wasSrcChainSend);
         
         // sign tx (for now we'll just sign the hash)
