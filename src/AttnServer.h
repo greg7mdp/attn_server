@@ -111,8 +111,6 @@ public:
 
     void stop() EXCLUDES(m_);
 
-    void push(FederatorEvent&& e) EXCLUDES(m_, eventsMutex_);
-
     // Don't process any events until the bootstrap has a chance to run
     void unlockMainLoop(UnlockMainLoopKey key) EXCLUDES(m_);
 
