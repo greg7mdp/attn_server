@@ -21,7 +21,6 @@
 
 #include <ripple/protocol/AccountID.h>
 
-#include <InitialSync.h>
 #include <ripple/beast/utility/Journal.h>
 #include <boost/asio/io_service.hpp>
 #include <boost/asio/ip/address.hpp>
@@ -29,6 +28,8 @@
 #include <memory>
 #include <mutex>
 #include <string>
+
+#include <AttnServer.h>
 
 namespace ripple {
 namespace sidechain {
@@ -39,25 +40,18 @@ class WebsocketClient;
 class ChainListener
 {
 protected:
-    enum class IsMainchain { no, yes };
-
-    bool const isMainchain_;
-    
-    // Sending xrp to the door account will trigger a x-chain transaction
-    AccountID const doorAccount_;
-    std::string const doorAccountStr_;
-    std::weak_ptr<AttnServer> attn_server_;
+    ChainType chain_type_;
+    std::string doorAccountStr_;
+    AccountID doorAccount_;
+    AttnServer& attn_server_;
     mutable std::mutex m_;
     
-    // Logic to handle potentially collecting and replaying historical
-    // transactions. Will be empty after replaying.
-    std::unique_ptr<InitialSync> GUARDED_BY(m_) initialSync_;
     beast::Journal j_;
 
     ChainListener(
-        IsMainchain isMainchain,
-        AccountID const& account,
-        std::weak_ptr<AttnServer>&& attn_server,
+        ChainType chain_type,
+        AccountID const& doorAccount,
+        AttnServer& attn_server,
         beast::Journal j);
 
     virtual ~ChainListener();
@@ -65,25 +59,7 @@ protected:
     std::string const& chainName() const;
 
     void processMessage(Json::Value const& msg) EXCLUDES(m_);
-
-    template <class E>
-    void pushEvent(E&& e, int txHistoryIndex, std::lock_guard<std::mutex> const&) REQUIRES(m_);
-
-public:
-    void setLastXChainTxnWithResult(uint256 const& hash) EXCLUDES(m_);
-    void setNoLastXChainTxnWithResult() EXCLUDES(m_);
-
-    Json::Value getInfo() const EXCLUDES(m_);
-
-    using RpcCallback = std::function<void(Json::Value const&)>;
-
-    /**
-     * send a RPC and call the callback with the RPC result
-     * @param cmd PRC command
-     * @param params RPC command parameter
-     * @param onResponse callback to process RPC result
-     */
-    virtual void send(std::string const& cmd, Json::Value const& params, RpcCallback onResponse) = 0;
+    bool isMainchain() const { return chain_type_== mainChain; }
 };
 
 }  // namespace sidechain

@@ -80,8 +80,8 @@ add_executable (attn_server
   src/main.cpp
   src/RPCServer.cpp
   src/AttnServer.cpp
-  #src/WebsocketClient.cpp
-  #src/ChainListener.cpp
+  src/WebsocketClient.cpp
+  src/ChainListener.cpp
   #src/InitialSync.cpp
   #src/ValidatorKeys.cpp
   #src/ValidatorKeysTool.cpp

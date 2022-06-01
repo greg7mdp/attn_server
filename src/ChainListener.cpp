@@ -35,21 +35,44 @@
 
 #include <type_traits>
 
+// todo: temporary hack as these are not defined in the current branch
+// -------------------------------------------------------------------
+namespace ripple {
+namespace jss {
+
+#define JSS(x) constexpr ::Json::StaticString x(#x)
+    
+JSS(Memo);                   // txn common field
+JSS(Memos);                  // txn common field
+JSS(MemoType);               // txn common field
+JSS(MemoData);               // txn common field
+
+#undef JSS
+}
+}
+
+// todo: temporary hack as log macros have changed
+// -----------------------------------------------
+#undef JLOGV
+#undef jss
+#define JLOGV(a,...)
+#define jss(a,b) a
+
+
 namespace ripple {
 namespace sidechain {
 
 class AttnServer;
 
 ChainListener::ChainListener(
-    IsMainchain isMainchain,
-    AccountID const& account,
-    std::weak_ptr<AttnServer>&& attn_server,
+    ChainType chain_type,
+    AccountID const& doorAccount,
+    AttnServer& attn_server,
     beast::Journal j)
-    : isMainchain_{isMainchain == IsMainchain::yes}
-    , doorAccount_{account}
-    , doorAccountStr_{toBase58(account)}
-    , attn_server_{std::move(attn_server)}
-    , initialSync_{std::make_unique<InitialSync>(attn_server_, isMainchain_, j)}
+    : chain_type_{chain_type}
+    , doorAccount_{doorAccount}
+    , doorAccountStr_{toBase58(doorAccount)}
+    , attn_server_{attn_server}
     , j_{j}
 {
 }
@@ -65,67 +88,7 @@ std::string const& ChainListener::chainName() const
     // ref, review the code to ensure the "jv" functions don't bind to temps
     static const std::string m("Mainchain");
     static const std::string s("Sidechain");
-    return isMainchain_ ? m : s;
-}
-
-namespace detail {
-    
-template <class T>
-std::optional<T> getMemoData(Json::Value const& v, std::uint32_t index) = delete;
-
-template <>
-std::optional<uint256> getMemoData<uint256>(Json::Value const& v, std::uint32_t index)
-{
-    try
-    {
-        uint256 result;
-        if (result.parseHex(v[jss::Memos][index][jss::Memo][jss::MemoData].asString()))
-            return result;
-    }
-    catch (...)
-    {
-    }
-    return {};
-}
-
-template <>
-std::optional<uint8_t> getMemoData<uint8_t>(Json::Value const& v, std::uint32_t index)
-{
-    try
-    {
-        auto const hexData = v[jss::Memos][index][jss::Memo][jss::MemoData].asString();
-        auto d = hexData.data();
-        if (hexData.size() != 2)
-            return {};
-        auto highNibble = charUnHex(d[0]);
-        auto lowNibble = charUnHex(d[1]);
-        if (highNibble < 0 || lowNibble < 0)
-            return {};
-        return (highNibble << 4) | lowNibble;
-    }
-    catch (...)
-    {
-    }
-    return {};
-}
-
-}  // namespace detail
-
-template <class E>
-void ChainListener::pushEvent(E&& e, int txHistoryIndex, std::lock_guard<std::mutex> const&)
-{
-    static_assert(std::is_rvalue_reference_v<decltype(e)>, "");
-
-    if (initialSync_)
-    {
-        auto const hasReplayed = initialSync_->onEvent(std::move(e));
-        if (hasReplayed)
-            initialSync_.reset();
-    }
-    else if (auto f = attn_server_.lock(); f && txHistoryIndex >= 0)
-    {
-        f->push(std::move(e));
-    }
+    return isMainchain() ? m : s;
 }
 
 void ChainListener::processMessage(Json::Value const& msg)
@@ -134,7 +97,7 @@ void ChainListener::processMessage(Json::Value const& msg)
     // processing and should run relatively quickly
     std::lock_guard l{m_};
 
-    JLOGV(j_.trace(), "chain listener message", jv("msg", msg), jv("isMainchain", isMainchain_));
+    JLOGV(j_.trace(), "chain listener message", jv("msg", msg), jv("isMainchain", isMainchain()));
 
     std::array<std::pair<bool, char const *>, 4> checks {{
         { msg.isMember(jss::validated) && msg[jss::validated].asBool(),  "not validated" },
@@ -432,329 +395,14 @@ void ChainListener::processMessage(Json::Value const& msg)
 
         switch (paymentType)
         {
-            case PaymentType::federator: {
-                auto s = txnSuccess ? j_.trace() : j_.error();
-                char const* status = txnSuccess ? "success" : "fail";
-                JLOGV(
-                    s,
-                    "attn_server txn status",
-                    jv("chain_name", chainName()),
-                    jv("status", status),
-                    jv("msg", msg));
-
-                auto const txnTypeRaw =
-                    detail::getMemoData<uint8_t>(msg[jss::transaction], 0);
-
-                if (!txnTypeRaw || *txnTypeRaw > AttnServer::txnTypeLast)
-                {
-                    JLOGV(
-                        j_.fatal(),
-                        "expected valid txnType in ChainListener",
-                        jv("msg", msg));
-                    return;
-                }
-
-                AttnServer::TxnType const txnType =
-                    static_cast<AttnServer::TxnType>(*txnTypeRaw);
-
-                auto const srcChainTxnHash =
-                    detail::getMemoData<uint256>(msg[jss::transaction], 1);
-
-                if (!srcChainTxnHash)
-                {
-                    JLOGV(
-                        j_.fatal(),
-                        "expected srcChainTxnHash in ChainListener",
-                        jv("msg", msg));
-                    return;
-                }
-                static_assert(
-                    AttnServer::txnTypeLast == 2, "Add new case below");
-                switch (txnType)
-                {
-                    case AttnServer::TxnType::xChain: {
-                        using namespace event;
-                        // The dirction looks backwards, but it's not. The
-                        // direction is for the *triggering* transaction.
-                        auto const dir =
-                            isMainchain_ ? Dir::sideToMain : Dir::mainToSide;
-                        XChainTransferResult e{
-                            dir,
-                            *dst,
-                            deliveredAmt,
-                            *seq,
-                            *srcChainTxnHash,
-                            *txnHash,
-                            txnTER,
-                            txnHistoryIndex};
-                        pushEvent(std::move(e), txnHistoryIndex, l);
-                    }
-                    break;
-                    case AttnServer::TxnType::refund: {
-                        using namespace event;
-                        // The direction is for the triggering transaction.
-                        auto const dir =
-                            isMainchain_ ? Dir::mainToSide : Dir::sideToMain;
-                        auto const dstChainTxnHash =
-                            detail::getMemoData<uint256>(
-                                msg[jss::transaction], 2);
-                        if (!dstChainTxnHash)
-                        {
-                            JLOGV(
-                                j_.fatal(),
-                                "expected valid dstChainTxnHash in "
-                                "ChainListener",
-                                jv("msg", msg));
-                            return;
-                        }
-                        RefundTransferResult e{
-                            dir,
-                            *dst,
-                            deliveredAmt,
-                            *seq,
-                            *srcChainTxnHash,
-                            *dstChainTxnHash,
-                            *txnHash,
-                            txnTER,
-                            txnHistoryIndex};
-                        pushEvent(std::move(e), txnHistoryIndex, l);
-                    }
-                    break;
-                }
-            }
-            break;
             case PaymentType::user: {
                 if (!txnSuccess)
                     return;
 
                 if (!deliveredAmt)
                     return;
-                {
-                    using namespace event;
-                    XChainTransferDetected e{
-                        isMainchain_ ? Dir::mainToSide : Dir::sideToMain,
-                        *src,
-                        *dst,
-                        *deliveredAmt,
-                        *seq,
-                        *txnHash,
-                        txnHistoryIndex};
-                    pushEvent(std::move(e), txnHistoryIndex, l);
-                }
-            }
-            break;
-        }
-    }
-    else
-    {
-        // account control tx
-        auto const ledgerIndex = [&]() -> std::optional<std::uint32_t> {
-            try
-            {
-                return msg["ledger_index"].asInt();
-            }
-            catch (...)
-            {
-                JLOGV(j_.error(), "no ledger_index", jv("message", msg));
-                assert(false);
-                return {};
-            }
-        }();
-        if (!ledgerIndex)
-        {
-            JLOG(j_.warn()) << "ignoring listener message, no ledgerIndex";
-            return;
-        }
 
-        auto const getSourceTag = [&]() -> std::optional<std::uint32_t> {
-            try
-            {
-                return msg[jss::transaction]["SourceTag"].asUInt();
-            }
-            catch (...)
-            {
-                JLOGV(j_.error(), "wrong SourceTag", jv("message", msg));
-                assert(false);
-                return {};
-            }
-        };
-
-        auto const getMemoStr = [&](std::uint32_t index) -> std::string {
-            try
-            {
-                if (msg[jss::transaction][jss::Memos][index] ==
-                    Json::Value::null)
-                    return {};
-                auto str = std::string(msg[jss::transaction][jss::Memos][index]
-                                          [jss::Memo][jss::MemoData]
-                                              .asString());
-                assert(str.length() <= event::MemoStringMax);
-                return str;
-            }
-            catch (...)
-            {
-            }
-            return {};
-        };
-
-        auto const accountControlType = *accountControlTypeOpt;
-        switch (accountControlType)
-        {
-            case AccountControlType::trigger: {
-                JLOGV(
-                    j_.trace(),
-                    "AccountControlType::trigger",
-                    jv("chain_name", chainName()),
-                    jv("account_seq", *seq),
-                    jv("msg", msg));
-                auto sourceTag = getSourceTag();
-                if (!sourceTag)
-                {
-                    JLOG(j_.warn())
-                        << "ignoring listener message, no sourceTag";
-                    return;
-                }
-                auto memoStr = getMemoStr(0);
-                event::TicketCreateTrigger e = {
-                    isMainchain_ ? event::Dir::mainToSide
-                                 : event::Dir::sideToMain,
-                    txnSuccess,
-                    0,
-                    *ledgerIndex,
-                    *txnHash,
-                    txnHistoryIndex,
-                    *sourceTag,
-                    std::move(memoStr)};
-                pushEvent(std::move(e), txnHistoryIndex, l);
-                break;
-            }
-            case AccountControlType::ticket: {
-                JLOGV(
-                    j_.trace(),
-                    "AccountControlType::ticket",
-                    jv("chain_name", chainName()),
-                    jv("account_seq", *seq),
-                    jv("msg", msg));
-                auto sourceTag = getSourceTag();
-                if (!sourceTag)
-                {
-                    JLOG(j_.warn())
-                        << "ignoring listener message, no sourceTag";
-                    return;
-                }
-
-                auto const triggeringTxnHash =
-                    detail::getMemoData<uint256>(msg[jss::transaction], 0);
-                if (!triggeringTxnHash)
-                {
-                    JLOGV(
-                        (txnSuccess ? j_.trace() : j_.error()),
-                        "bootstrap ticket",
-                        jv("chain_name", chainName()),
-                        jv("account_seq", *seq),
-                        jv("msg", msg));
-
-                    if (!txnSuccess)
-                        return;
-
-                    event::BootstrapTicket e = {
-                        isMainchain_,
-                        txnSuccess,
-                        *seq,
-                        *ledgerIndex,
-                        txnHistoryIndex,
-                        *sourceTag};
-                    pushEvent(std::move(e), txnHistoryIndex, l);
-                    return;
-                }
-
-                // The TicketCreate tx is both the result of its triggering
-                // AccountSet tx, and the trigger of another account control tx,
-                // if there is a tx in the memo field.
-                event::TicketCreateResult e = {
-                    isMainchain_ ? event::Dir::sideToMain
-                                 : event::Dir::mainToSide,
-                    txnSuccess,
-                    *seq,
-                    *ledgerIndex,
-                    *triggeringTxnHash,
-                    *txnHash,
-                    txnHistoryIndex,
-                    *sourceTag,
-                    getMemoStr(1)};
-                pushEvent(std::move(e), txnHistoryIndex, l);
-                break;
-            }
-            case AccountControlType::depositAuth: {
-                JLOGV(
-                    j_.trace(),
-                    "AccountControlType::depositAuth",
-                    jv("chain_name", chainName()),
-                    jv("account_seq", *seq),
-                    jv("msg", msg));
-                auto const triggeringTxHash =
-                    detail::getMemoData<uint256>(msg[jss::transaction], 0);
-                if (!triggeringTxHash)
-                {
-                    JLOG(j_.warn())
-                        << "ignoring listener message, no triggeringTxHash";
-                    return;
-                }
-
-                auto opOpt = [&]() -> std::optional<event::AccountFlagOp> {
-                    try
-                    {
-                        if (msg[jss::transaction].isMember(jss::SetFlag) &&
-                            msg[jss::transaction][jss::SetFlag].isIntegral())
-                        {
-                            assert(
-                                msg[jss::transaction][jss::SetFlag].asUInt() ==
-                                asfDepositAuth);
-                            return event::AccountFlagOp::set;
-                        }
-                        if (msg[jss::transaction].isMember(jss::ClearFlag) &&
-                            msg[jss::transaction][jss::ClearFlag].isIntegral())
-                        {
-                            assert(
-                                msg[jss::transaction][jss::ClearFlag]
-                                    .asUInt() == asfDepositAuth);
-
-                            return event::AccountFlagOp::clear;
-                        }
-                    }
-                    catch (...)
-                    {
-                    }
-                    JLOGV(
-                        j_.error(),
-                        "unexpected accountSet tx",
-                        jv("message", msg));
-                    assert(false);
-                    return {};
-                }();
-                if (!opOpt)
-                    return;
-
-                event::DepositAuthResult e{
-                    isMainchain_ ? event::Dir::sideToMain
-                                 : event::Dir::mainToSide,
-                    txnSuccess,
-                    *seq,
-                    *ledgerIndex,
-                    *triggeringTxHash,
-                    txnHistoryIndex,
-                    *opOpt};
-                pushEvent(std::move(e), txnHistoryIndex, l);
-                break;
-            }
-            case AccountControlType::signerList:
-                // TODO
-                break;
-            case AccountControlType::disableMasterKey: {
-                event::DisableMasterKeyResult e{
-                    isMainchain_, *seq, txnHistoryIndex};
-                pushEvent(std::move(e), txnHistoryIndex, l);
-                break;
+                // todo - store in db
             }
             break;
         }
@@ -762,53 +410,6 @@ void ChainListener::processMessage(Json::Value const& msg)
 
     // Note: Handling "last in history" is done through the lambda given
     // to `make_scope` earlier in the function
-}
-
-void
-ChainListener::setLastXChainTxnWithResult(uint256 const& hash)
-{
-    // Note that `onMessage` also locks this mutex, and it calls
-    // `setLastXChainTxnWithResult`. However, it calls that function on the
-    // other chain, so the mutex will not be locked twice on the same
-    // thread.
-    std::lock_guard l{m_};
-    if (!initialSync_)
-        return;
-
-    auto const hasReplayed = initialSync_->setLastXChainTxnWithResult(hash);
-    if (hasReplayed)
-        initialSync_.reset();
-}
-
-void
-ChainListener::setNoLastXChainTxnWithResult()
-{
-    // Note that `onMessage` also locks this mutex, and it calls
-    // `setNoLastXChainTxnWithResult`. However, it calls that function on
-    // the other chain, so the mutex will not be locked twice on the same
-    // thread.
-    std::lock_guard l{m_};
-    if (!initialSync_)
-        return;
-
-    bool const hasReplayed = initialSync_->setNoLastXChainTxnWithResult();
-    if (hasReplayed)
-        initialSync_.reset();
-}
-
-Json::Value
-ChainListener::getInfo() const
-{
-    std::lock_guard l{m_};
-
-    Json::Value ret{Json::objectValue};
-    ret[jss::state] = initialSync_ ? "syncing" : "normal";
-    if (initialSync_)
-    {
-        ret[jss::sync_info] = initialSync_->getInfo();
-    }
-    // get the state (in sync, syncing)
-    return ret;
 }
 
 }  // namespace sidechain

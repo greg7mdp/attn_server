@@ -29,8 +29,6 @@
 #include <ripple/protocol/SecretKey.h>
 #include <ripple/protocol/STXChainClaimProof.h>
 
-#include <boost/container/flat_map.hpp>
-
 #include <FederatorEvents.h>
 
 namespace boost {
@@ -42,10 +40,9 @@ namespace asio {
 namespace ripple {
 namespace sidechain {
 
-class MainchainListener;
-class SidechainListener;
+class ChainListener;
 
-enum  ChainType { sideChain, mainChain };
+enum ChainType { sideChain, mainChain };
 
 // --------------------------------------------------------------------
 // --------------------------------------------------------------------
@@ -102,8 +99,8 @@ public:
 private:
     AttnServerConfig cfg_;
     
-    std::shared_ptr<MainchainListener> mainchainListener_;
-    std::shared_ptr<SidechainListener> sidechainListener_;
+    std::shared_ptr<ChainListener> mainchainListener_;
+    std::shared_ptr<ChainListener> sidechainListener_;
 
 public:
     AttnServer(std::string const& config_filename);
